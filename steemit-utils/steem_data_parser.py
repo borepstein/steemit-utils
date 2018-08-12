@@ -69,9 +69,29 @@ class SteemDataParser():
         first_loop = True
         last_entry = 0
         sel_arr = []
-        index_from = limit
-        
+        index_from = 0
+        past_start_time = 'start_time' not in set(kwargs.keys())
+        watch_end_time = 'end_time' in set(kwargs.keys())
+
+        if not past_start_time:
+            start_time_utc = steem_time_to_utc( steem_time = kwargs['start_time'] )
+
+        if watch_end_time:
+            end_time_utc = steem_time_to_utc( steem_time = kwargs['end_time'] )
+            
         while True:
+            if completion_flag: break
+            
+            if not past_start_time and \
+               BlogHistoryEntry( entry = self.get_steemd().\
+                                 get_account_history(account = account, \
+                                                     index_from = index_from, \
+                                                     limit = 0)[0]).get_timestamp_utc() < \
+                                                     start_time_utc:
+                index_from += limit
+                continue
+            
+            index_from += limit
             sel_arr = self.get_steemd().\
                       get_account_history(account = account, \
                                           index_from = index_from, \
@@ -85,13 +105,19 @@ class SteemDataParser():
             if ( len( sel_arr ) == 0 ): completion_flag = True
             else: last_entry = sel_arr[len(sel_arr) - 1][0]
             
-            for el in sel_arr: yield BlogHistoryEntry(entry = el)
+            for el in sel_arr:
+                el_entry = BlogHistoryEntry(entry = el)
+                if not past_start_time:
+                    past_start_time = el_entry.get_timestamp_utc() >= start_time_utc
 
-            if completion_flag: break
+                if not past_start_time: continue
 
-            index_from += limit
+                if watch_end_time and el_entry.get_timestamp_utc() > end_time_utc:
+                    completion_flag = True
+                    break
+                
+                yield el_entry
 
-    
 # end SteemDataParser()
 
 # begin BlogAccount():
@@ -162,11 +188,12 @@ class BlogEntry():
 
         self.__hash['exists'] = False
 
-        for el in sdp.get_account_history(account = self.__hash['author']):
+        for el in sdp.get_account_history(account = self.__hash['author'], limit=1000):
             if el.get_entry_type_hash()['type'] != 'comment': continue
             if el.get_hash()['entry'][1]['op'][1]['author'] != self.__hash['author']: continue
             if el.get_hash()['entry'][1]['op'][1]['permlink'] != self.__hash['permlink']: continue
             self.__hash['exists'] = True
+            self.__hash['creation_record'] = el
             break
         
         if self.__hash['account'] == self.__hash['author']:
@@ -179,10 +206,19 @@ class BlogEntry():
 
     def exists_on_blockchain(self): return self.__hash['exists']
 
+    def get_creation_record(self):
+        try:
+            return self.__hash['creation_record']
+        except:
+            return None
+
     def get_votes(self):
         sdp = self.__hash['steem_data_parser']
         
-        for el in sdp.get_account_history(account = self.__hash['author']):
+        for el in sdp.get_account_history(account = self.__hash['author'], \
+                                          limit = 1000,
+                                          start_time = \
+                                          self.get_creation_record().get_timestamp() ):
             if el.get_entry_type_hash()['type'] != 'vote': continue
             if el.get_hash()['entry'][1]['op'][1]['author'] != self.__hash['author']: continue
             if el.get_hash()['entry'][1]['op'][1]['permlink'] != self.__hash['permlink']: continue
@@ -214,7 +250,7 @@ class BlogHistoryEntry():
     def get_timestamp(self): return self.__hash['entry'][1]['timestamp']
 
     def get_timestamp_utc(self):
-        return time.mktime( time.strptime( self.get_timestamp() ) )
+        return steem_time_to_utc( steem_time = self.get_timestamp() )
 
     def get_entry_id(self): return self.__hash['entry'][0]
 
@@ -266,5 +302,8 @@ class BlogHistoryEntry():
 # end BlogHistoryEntry()
 
 '''
-Stand-alone methods.
+Stand-alone functions.
 '''
+
+def steem_time_to_utc(**kwargs):
+    return time.mktime( time.strptime( kwargs['steem_time'], '%Y-%m-%dT%H:%M:%S' ) )
