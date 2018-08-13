@@ -37,12 +37,10 @@ class SteemDataParser():
         first_req_flag = True
         sel_arr = []
         start_uname = ''
-        batch_size = 100
         el = None
 
-        try:
-            batch_size = kwargs['batch_size']
-        except: pass
+        try: batch_size = kwargs['batch_size']
+        except: batch_size = 100
         
         while True:
             sel_arr = self.get_steemd().\
@@ -63,15 +61,15 @@ class SteemDataParser():
         account = kwargs['account']
 
         try: limit = kwargs['limit']
-        except: limit = 100
+        except: limit = 5000
 
         completion_flag = False
-        first_loop = True
         last_entry = 0
         sel_arr = []
         index_from = 0
         past_start_time = 'start_time' not in set(kwargs.keys())
         watch_end_time = 'end_time' in set(kwargs.keys())
+        first_loop = True
 
         if not past_start_time:
             start_time_utc = steem_time_to_utc( steem_time = kwargs['start_time'] )
@@ -79,13 +77,11 @@ class SteemDataParser():
         if watch_end_time:
             end_time_utc = steem_time_to_utc( steem_time = kwargs['end_time'] )
             
-        while True:
-            if completion_flag: break
-            
+        while not completion_flag:
             if not past_start_time and \
                BlogHistoryEntry( entry = self.get_steemd().\
                                  get_account_history(account = account, \
-                                                     index_from = index_from, \
+                                                     index_from = index_from - 1, \
                                                      limit = 0)[0]).get_timestamp_utc() < \
                                                      start_time_utc:
                 index_from += limit
@@ -94,18 +90,21 @@ class SteemDataParser():
             index_from += limit
             sel_arr = self.get_steemd().\
                       get_account_history(account = account, \
-                                          index_from = index_from, \
-                                          limit = limit)
-
-            if not first_loop:
-                if sel_arr[len(sel_arr) - 1][0] == \
-                   last_entry: completion_flag = True
-            else: first_loop = False
+                                          index_from = index_from - 1, \
+                                          limit = limit - 1)
 
             if ( len( sel_arr ) == 0 ): completion_flag = True
-            else: last_entry = sel_arr[len(sel_arr) - 1][0]
+
+            if not first_loop:
+                if sel_arr[len(sel_arr) - 1][0] == last_entry:
+                    completion_flag = True
+                    continue
+            else: first_loop = False
             
             for el in sel_arr:
+                if not first_loop and el[0] <= last_entry:
+                    continue
+                
                 el_entry = BlogHistoryEntry(entry = el)
                 if not past_start_time:
                     past_start_time = el_entry.get_timestamp_utc() >= start_time_utc
@@ -118,6 +117,8 @@ class SteemDataParser():
                 
                 yield el_entry
 
+            last_entry = sel_arr[len(sel_arr) - 1][0]
+            
 # end SteemDataParser()
 
 # begin BlogAccount():
