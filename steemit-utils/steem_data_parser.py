@@ -164,11 +164,11 @@ class BlogEntry():
                 if el[0] == '@':
                     self.__hash['author'] = el[1:]
                     break
-                
-            if 'account' not in set(self.__hash.keys()) and \
-               'author' in set(self.__hash.keys()):
-                self.__hash['account'] = self.__hash['author']
 
+        if 'author' not in set(self.__hash.keys()): self.__hash['author'] = None
+        
+        if 'account' not in set(self.__hash.keys()): self.__hash['account'] = self.__hash['author']
+        
         try: self.__hash['verify_existence']
         except: self.__hash['verify_existence'] = True
 
