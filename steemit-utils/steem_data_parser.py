@@ -145,7 +145,7 @@ class BlogAccount():
 
 # begin BlogEntry()
 '''
-BlogEntry(account = <account_name>, author = <author>, permlink = <permlink> )
+BlogEntry(account = <account_name>, author = <author>, permlink = <permlink> , verify_existence=<Boolean>, history_log=<history entry arr/generator>)
 BlogEntry(account = <account_name>, url = <url> )
 BlogEntry(url = <url> )
 '''
@@ -168,7 +168,12 @@ class BlogEntry():
             if 'account' not in set(self.__hash.keys()) and \
                'author' in set(self.__hash.keys()):
                 self.__hash['account'] = self.__hash['author']
-            
+
+        try: self.__hash['verify_existence']
+        except: self.__hash['verify_existence'] = True
+
+        if not self.__hash['verify_existence']: return
+        
         try:
             sdp = self.__hash['steem_data_parser']
         except:
@@ -189,7 +194,10 @@ class BlogEntry():
 
         self.__hash['exists'] = False
 
-        for el in sdp.get_account_history(account = self.__hash['author'], limit=1000):
+        if 'history_log' in self.__hash.keys(): hist_src = self.__hash['history_log']
+        else: hist_src = sdp.get_account_history(account = self.__hash['author'])
+            
+        for el in hist_src:
             if el.get_entry_type_hash()['type'] != 'comment': continue
             if el.get_hash()['entry'][1]['op'][1]['author'] != self.__hash['author']: continue
             if el.get_hash()['entry'][1]['op'][1]['permlink'] != self.__hash['permlink']: continue
@@ -214,12 +222,12 @@ class BlogEntry():
             return None
 
     def get_votes(self):
-        sdp = self.__hash['steem_data_parser']
-        
-        for el in sdp.get_account_history(account = self.__hash['author'], \
-                                          limit = 1000,
-                                          start_time = \
-                                          self.get_creation_record().get_timestamp() ):
+        if 'history_log' in self.__hash.keys(): hist_src = self.__hash['history_log']
+        else:
+            sdp = self.__hash['steem_data_parser']
+            hist_src = sdp.get_account_history(account = self.__hash['author'])
+
+        for el in hist_src:
             if el.get_entry_type_hash()['type'] != 'vote': continue
             if el.get_hash()['entry'][1]['op'][1]['author'] != self.__hash['author']: continue
             if el.get_hash()['entry'][1]['op'][1]['permlink'] != self.__hash['permlink']: continue
